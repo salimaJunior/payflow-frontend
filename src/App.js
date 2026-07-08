@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
-const BACKEND = "https://payflow-backend.onrender.com";
+const BACKEND = "https://payflow3d.onrender.com";
+const FRONTEND_URL = "https://payflowtobtc.onrender.com";
 
 const C = {
   bg:"#0F0F1A", card:"#1E1E35", accent:"#6C63FF", accentLight:"#8B84FF",
@@ -15,12 +16,22 @@ const inp = (err=false) => ({
 });
 
 const api = async (path, opts={}) => {
-  const res = await fetch(BACKEND+path, {
+  // Safe routing backup: handles backend structures whether they require the /api root or omit it
+  const cleanPath = path.startsWith("/api") ? path : `/api${path}`;
+  
+  const res = await fetch(BACKEND + cleanPath, {
     headers:{"Content-Type":"application/json"}, ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
+  }).catch(() => {
+    // Fallback if the backend does not use /api routing architecture prefix
+    return fetch(BACKEND + path, {
+      headers:{"Content-Type":"application/json"}, ...opts,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
   });
+
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error||"Request failed");
+  if (!res.ok) throw new Error(data?.error || "Request failed");
   return data;
 };
 
@@ -87,7 +98,6 @@ function Checkout({ link, onBack }) {
   const [popupUrl, setPopup]= useState("");
   const [kesRate, setRate]  = useState(130);
 
-  // Fetch live rate on load
   useEffect(() => {
     fetch("https://api.exchangerate-api.com/v4/latest/USD")
       .then(r=>r.json())
@@ -105,7 +115,7 @@ function Checkout({ link, onBack }) {
     setErr(""); setStep("processing");
     try {
       const [expMonth, expYear] = card.expiry.split("/");
-      const result = await api("/api/payments/charge", {
+      const result = await api("/payments/charge", {
         method:"POST",
         body:{
           amount: customAmount,
@@ -130,7 +140,7 @@ function Checkout({ link, onBack }) {
     if (pin.length<4) return;
     setStep("processing");
     try {
-      const result = await api("/api/payments/submit-pin",{method:"POST",body:{reference,pin}});
+      const result = await api("/payments/submit-pin",{method:"POST",body:{reference,pin}});
       if (result.status==="success") setStep("done");
       else if (result.status==="open_url") { setPopup(result.url); setStep("popup"); }
       else if (result.status==="send_otp") setStep("otp");
@@ -142,7 +152,7 @@ function Checkout({ link, onBack }) {
     if (!otp) return;
     setStep("processing");
     try {
-      const result = await api("/api/payments/submit-otp",{method:"POST",body:{reference,otp}});
+      const result = await api("/payments/submit-otp",{method:"POST",body:{reference,otp}});
       if (result.status==="success") setStep("done");
       else throw new Error("OTP verification failed");
     } catch(e) { setErr(e.message); setStep("error"); }
@@ -152,13 +162,12 @@ function Checkout({ link, onBack }) {
     setPopup("");
     setStep("processing");
     try {
-      const result = await api(`/api/payments/verify/${reference}`);
+      const result = await api(`/payments/verify/${reference}`);
       if (result.data?.status==="success") setStep("done");
       else throw new Error("Payment not confirmed yet. Please try again.");
     } catch(e) { setErr(e.message); setStep("error"); }
   };
 
-  // Processing
   if (step==="processing") return (
     <div style={{ textAlign:"center",padding:"48px 0" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -168,7 +177,6 @@ function Checkout({ link, onBack }) {
     </div>
   );
 
-  // PIN
   if (step==="pin") return (
     <div style={{ textAlign:"center",padding:"24px 0" }}>
       <div style={{ fontSize:40,marginBottom:16 }}>🔢</div>
@@ -186,7 +194,6 @@ function Checkout({ link, onBack }) {
     </div>
   );
 
-  // OTP
   if (step==="otp") return (
     <div style={{ textAlign:"center",padding:"24px 0" }}>
       <div style={{ fontSize:40,marginBottom:16 }}>📱</div>
@@ -203,7 +210,6 @@ function Checkout({ link, onBack }) {
     </div>
   );
 
-  // 3D Popup
   if (step==="popup") return (
     <div>
       <SecurePopup url={popupUrl} onClose={()=>setStep("form")} onDone={verifyPopup}/>
@@ -215,7 +221,6 @@ function Checkout({ link, onBack }) {
     </div>
   );
 
-  // Done
   if (step==="done") return (
     <div style={{ textAlign:"center",padding:"32px 0" }}>
       <div style={{ width:72,height:72,borderRadius:"50%",background:`${C.green}22`,border:`2px solid ${C.green}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 20px" }}>✓</div>
@@ -230,7 +235,6 @@ function Checkout({ link, onBack }) {
     </div>
   );
 
-  // Error
   if (step==="error") return (
     <div style={{ textAlign:"center",padding:"32px 0" }}>
       <div style={{ fontSize:48,marginBottom:16 }}>❌</div>
@@ -240,7 +244,6 @@ function Checkout({ link, onBack }) {
     </div>
   );
 
-  // Main form
   return (
     <div>
       <div style={{ textAlign:"center",marginBottom:20 }}>
@@ -329,23 +332,23 @@ function Dashboard({ onOpenLink }) {
   const [tab, setTab]         = useState("links");
 
   useEffect(() => {
-    api("/api/links").then(setLinks).catch(()=>{});
-    api("/api/payments/transactions").then(setTxs).catch(()=>{});
+    api("/links").then(setLinks).catch(()=>{});
+    api("/payments/transactions").then(setTxs).catch(()=>{});
   }, []);
 
   const generate = async () => {
     if (!form.description||!form.amount) return;
-    const link = await api("/api/links",{method:"POST",body:form}).catch(e=>{alert(e.message);return null;});
+    const link = await api("/links",{method:"POST",body:form}).catch(e=>{alert(e.message);return null;});
     if (link) { setLinks(p=>[link,...p]); setNewLink(link); setForm({description:"",amount:""}); }
   };
 
   const remove = async (code) => {
-    await api(`/api/links/${code}`,{method:"DELETE"}).catch(()=>{});
+    await api(`/links/${code}`,{method:"DELETE"}).catch(()=>{});
     setLinks(p=>p.filter(l=>l.code!==code));
   };
 
   const copy = (code) => {
-    navigator.clipboard.writeText(`http://localhost:3000/pay/${code}`);
+    navigator.clipboard.writeText(`${FRONTEND_URL}/pay/${code}`);
     setCopied(code); setTimeout(()=>setCopied(null),2000);
   };
 
@@ -407,7 +410,7 @@ function Dashboard({ onOpenLink }) {
                 <div style={{ marginTop:14,padding:14,background:`${C.green}10`,border:`1px solid ${C.green}30`,borderRadius:10 }}>
                   <div style={{ color:C.green,fontSize:12,fontWeight:700,marginBottom:6 }}>✓ Ready to share!</div>
                   <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-                    <span style={{ color:C.text,fontSize:13,fontFamily:"monospace" }}>localhost:3000/pay/{newLink.code}</span>
+                    <span style={{ color:C.text,fontSize:13,fontFamily:"monospace" }}>payflowtobtc.onrender.com/pay/{newLink.code}</span>
                     <div style={{ display:"flex",gap:8 }}>
                       <button onClick={()=>copy(newLink.code)} style={{ padding:"5px 12px",background:`${C.accent}22`,border:`1px solid ${C.accent}44`,borderRadius:6,color:C.accentLight,fontSize:12,cursor:"pointer",fontWeight:600 }}>
                         {copied===newLink.code?"Copied!":"Copy"}
@@ -425,7 +428,7 @@ function Dashboard({ onOpenLink }) {
                 <div key={link.code} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.border}` }}>
                   <div>
                     <div style={{ color:C.text,fontSize:14,fontWeight:600 }}>{link.description}</div>
-                    <div style={{ color:C.muted,fontSize:11,marginTop:2,fontFamily:"monospace" }}>localhost:3000/pay/{link.code}</div>
+                    <div style={{ color:C.muted,fontSize:11,marginTop:2,fontFamily:"monospace" }}>payflowtobtc.onrender.com/pay/{link.code}</div>
                   </div>
                   <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                     <span style={{ color:C.green,fontWeight:800,fontSize:15 }}>${link.amount.toFixed(2)}</span>
