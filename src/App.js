@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 
-const BACKEND = "http://localhost:4000";
+const BACKEND = "https://payflow-backend.onrender.com";
 
 const C = {
   bg:"#0F0F1A", card:"#1E1E35", accent:"#6C63FF", accentLight:"#8B84FF",
   green:"#00D084", red:"#FF4F6A", gold:"#F5A623",
-  text:"#F0F0FF", muted:"#7A7A9A", border:"#2A2A45", surface:"#16162A",
+  text:"#F0F0FF", muted:"#3b3b3e", border:"#2A2A45", surface:"#16162A",
 };
 
 const inp = (err=false) => ({
