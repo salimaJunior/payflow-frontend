@@ -474,21 +474,33 @@ export default function App() {
   const [view, setView] = useState("dashboard");
   const [activeLink, setAL] = useState(null);
   const [loadingLink, setLoadingLink] = useState(true);
+  const [routeError, setRouteError] = useState("");
 
   useEffect(() => {
     const path = window.location.pathname; // e.g., "/pay/5e1a1800"
+    
     if (path.startsWith("/pay/")) {
-      const code = path.split("/pay/")[1];
+      const code = path.split("/pay/")[1]?.trim();
       if (code) {
-        // Automatically fetch link configurations from your backend database matching this code
-        api(`/links/${code}`)
+        // Direct absolute fetch bypasses dashboard lifecycle completely
+        fetch(`https://payflow3d.onrender.com/api/links/${code}`)
+          .then((res) => {
+            if (!res.ok) throw new Error("This payment link does not exist or has expired.");
+            return res.json();
+          })
           .then((linkData) => {
-            setAL(linkData);
-            setView("checkout");
+            // Ensure we got a valid object, not an array
+            if (linkData && !Array.isArray(linkData)) {
+              setAL(linkData);
+              setView("checkout");
+            } else {
+              throw new Error("Invalid link data structure received.");
+            }
             setLoadingLink(false);
           })
           .catch((err) => {
-            console.error("Failed to load shared link details:", err.message);
+            console.error("Routing error:", err.message);
+            setRouteError(err.message);
             setLoadingLink(false);
           });
         return;
@@ -497,21 +509,45 @@ export default function App() {
     setLoadingLink(false);
   }, []);
 
-  const openLink = (link) => { setAL(link); setView("checkout"); };
+  const openLink = (link) => { 
+    window.history.pushState({}, "", `/pay/${link.code}`);
+    setAL(link); 
+    setView("checkout"); 
+  };
+
+  const handleBack = () => {
+    window.history.pushState({}, "", "/");
+    setAL(null);
+    setView("dashboard");
+  };
 
   if (loadingLink) {
     return (
       <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         <div style={{ width:40, height:40, border:`3px solid ${C.accent}`, borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
       </div>
     );
   }
 
-  if (view==="checkout" && activeLink) {
+  if (routeError) {
+    return (
+      <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ width:"100%", maxWidth:420, background:C.card, borderRadius:20, padding:32, border:`1px solid ${C.border}`, textAlign:"center" }}>
+          <div style={{ fontSize:40, marginBottom:16 }}>⚠️</div>
+          <div style={{ color:C.text, fontSize:18, fontWeight:700, marginBottom:8 }}>Link Unavailable</div>
+          <div style={{ color:C.red, fontSize:13, marginBottom:24, padding:"10px 16px", background:`${C.red}10`, borderRadius:8 }}>{routeError}</div>
+          <button onClick={handleBack} style={{ padding:"10px 24px", background:C.accent, border:"none", borderRadius:10, color:"#fff", fontWeight:700, cursor:"pointer" }}>Go to Dashboard</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "checkout" && activeLink) {
     return (
       <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"Inter,Segoe UI,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
         <div style={{ width:"100%", maxWidth:420, background:C.card, borderRadius:20, padding:32, border:`1px solid ${C.border}`, boxShadow:"0 24px 80px rgba(0,0,0,0.5)" }}>
-          <Checkout link={activeLink} onBack={() => { window.history.pushState({}, "", "/"); setView("dashboard"); }}/>
+          <Checkout link={activeLink} onBack={handleBack}/>
         </div>
       </div>
     );
