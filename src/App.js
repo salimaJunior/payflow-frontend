@@ -473,13 +473,49 @@ function Dashboard({ onOpenLink }) {
 export default function App() {
   const [view, setView] = useState("dashboard");
   const [activeLink, setAL] = useState(null);
+  const [loadingLink, setLoadingLink] = useState(true);
+
+  useEffect(() => {
+    const path = window.location.pathname; // e.g., "/pay/5e1a1800"
+    if (path.startsWith("/pay/")) {
+      const code = path.split("/pay/")[1];
+      if (code) {
+        // Automatically fetch link configurations from your backend database matching this code
+        api(`/links/${code}`)
+          .then((linkData) => {
+            setAL(linkData);
+            setView("checkout");
+            setLoadingLink(false);
+          })
+          .catch((err) => {
+            console.error("Failed to load shared link details:", err.message);
+            setLoadingLink(false);
+          });
+        return;
+      }
+    }
+    setLoadingLink(false);
+  }, []);
+
   const openLink = (link) => { setAL(link); setView("checkout"); };
-  if (view==="checkout" && activeLink) return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Inter,Segoe UI,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
-      <div style={{ width:"100%",maxWidth:420,background:C.card,borderRadius:20,padding:32,border:`1px solid ${C.border}`,boxShadow:"0 24px 80px rgba(0,0,0,0.5)" }}>
-        <Checkout link={activeLink} onBack={()=>setView("dashboard")}/>
+
+  if (loadingLink) {
+    return (
+      <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ width:40, height:40, border:`3px solid ${C.accent}`, borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (view==="checkout" && activeLink) {
+    return (
+      <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"Inter,Segoe UI,sans-serif", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ width:"100%", maxWidth:420, background:C.card, borderRadius:20, padding:32, border:`1px solid ${C.border}`, boxShadow:"0 24px 80px rgba(0,0,0,0.5)" }}>
+          <Checkout link={activeLink} onBack={() => { window.history.pushState({}, "", "/"); setView("dashboard"); }}/>
+        </div>
+      </div>
+    );
+  }
+
   return <Dashboard onOpenLink={openLink}/>;
 }
